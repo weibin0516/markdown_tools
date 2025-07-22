@@ -739,16 +739,21 @@ function generatePages(markdown) {
                                     continue;
                                 }
                                 
-                                // 临时添加到当前页面以测试高度
-                                const existingList = pageContentDiv.querySelector(listElement.tagName.toLowerCase() + ':last-child');
-                                if (existingList && existingList.tagName === listElement.tagName) {
-                                    existingList.appendChild(clonedItem);
+                                // 检查最后一个元素是否为相同类型的列表
+                                const lastChild = pageContentDiv.lastElementChild;
+                                const canMergeWithLastList = lastChild && 
+                                    lastChild.tagName === listElement.tagName && 
+                                    lastChild.className === listElement.className;
+                                
+                                if (canMergeWithLastList) {
+                                    // 尝试添加到现有列表
+                                    lastChild.appendChild(clonedItem);
                                     pageContentDiv.offsetHeight;
                                     const currentHeight = pageContentDiv.scrollHeight;
                                     
                                     if (currentHeight > contentHeight + 20) {
                                         // 移除刚添加的项目
-                                        existingList.removeChild(clonedItem);
+                                        lastChild.removeChild(clonedItem);
                                         
                                         // 创建新页面
                                         createNewPage();
@@ -768,10 +773,10 @@ function generatePages(markdown) {
                                         pageContentDiv.appendChild(currentList);
                                         console.log(`List item moved to new page.`);
                                     } else {
-                                        console.log(`List item fits on current page.`);
+                                        console.log(`List item merged with existing list.`);
                                     }
                                 } else {
-                                    // 没有现有列表，创建新的
+                                    // 最后一个元素不是相同类型的列表，创建新的列表
                                     currentList = document.createElement(listElement.tagName);
                                     currentList.className = listElement.className;
                                     
@@ -783,7 +788,21 @@ function generatePages(markdown) {
                                     }
                                     
                                     currentList.appendChild(clonedItem);
+                                    
+                                    // 测试是否能放入当前页面
                                     pageContentDiv.appendChild(currentList);
+                                    pageContentDiv.offsetHeight;
+                                    const currentHeight = pageContentDiv.scrollHeight;
+                                    
+                                    if (currentHeight > contentHeight + 20) {
+                                        // 移除列表，创建新页面
+                                        pageContentDiv.removeChild(currentList);
+                                        createNewPage();
+                                        pageContentDiv.appendChild(currentList);
+                                        console.log(`New list created on new page.`);
+                                    } else {
+                                        console.log(`New list created on current page.`);
+                                    }
                                 }
                             }
                         }
