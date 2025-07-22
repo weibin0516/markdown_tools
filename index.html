@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>交互式原型：Markdown 智能分页切图工具</title>
+    
+    <!-- Chosen Palette: Warm Neutrals -->
+    <!-- Application Structure Plan: 采用经典的双栏布局。左侧为控制面板，包含Markdown编辑器和所有样式自定义选项，使用户可以方便地输入内容并调整外观。右侧为实时预览区域，即时反馈用户的每一次修改，忠实模拟最终的图片分页效果。这种结构将“输入/控制”与“输出/结果”清晰分离，符合创作者工具的直觉，实现了“所见即所得”的核心用户流程：编辑 -> 预览 -> 调整 -> 导出。 -->
+    <!-- Visualization & Content Choices: PRD -> 核心目标是将Markdown渲染为分页图片。 -> 呈现方式是使用HTML/CSS在DOM中创建模拟页面，并用JS实现智能分页算法。 -> 交互核心是编辑器的`input`事件触发实时重新渲染和分页。->  justification: 这是实现实时预览和复杂分页逻辑的最直接、最高效的方式。 -> 使用的库: Tailwind CSS (布局), marked.js (Markdown解析), highlight.js (代码高亮), html2canvas.js (截图), jszip.js (打包)。 -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Noto+Serif+SC:wght@400;700&display=swap');
+        
+        body {
+            font-family: 'PingFangSC-Light', 'Inter', 'Noto Serif SC', sans-serif;
+            background-color: #F8F5F2; /* Warm Neutral Background */
+        }
+        .preview-page {
+            width: 330px;
+            min-height: 440px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            overflow: visible;
+            flex-shrink: 0;
+            background-color: white;
+            transition: all 0.2s ease-in-out;
+        }
+        .preview-page-content {
+            box-sizing: border-box;
+            overflow: visible;
+            word-wrap: break-word;
+            hyphens: auto;
+        }
+        .rendered-content h1 {
+            font-size: 1.3em;
+            font-weight: bold;
+            margin: 0.4em 0 0.3em 0;
+            line-height: 1.3;
+            border-bottom: 2px solid currentColor;
+            padding-bottom: 0.2em;
+        }
+        .rendered-content h2 {
+            font-size: 1.1em;
+            font-weight: bolder;
+            margin: 0.6em 0.4em 0.2em 0;
+            padding-left: 0.4em;
+            border-left: 5px solid currentColor;
+            line-height: 1.3;
+        }
+        .rendered-content h3 {
+            font-size: 0.875em;
+            margin: 0.3em 0 0.2em 0;
+            line-height: 1.3;
+            font-weight: bold;
+        }
+        .rendered-content h1:first-child, .rendered-content h2:first-child, .rendered-content h3:first-child {
+            margin-top: 0;
+        }
+        .rendered-content h4, .rendered-content h5, .rendered-content h6 {
+            font-size: 0.875em;
+            line-height: 1.3;
+            margin: 0.4em 0 0.2em 0;
+            font-weight: bold;
+        }
+        .rendered-content p {
+            margin: 0.3em 0.4em;
+            line-height: 1.6;
+            letter-spacing: 0.1em;
+            font-size: 0.875em;
+            word-spacing: 0.05em;
+        }
+        .rendered-content p:empty {
+            display: none;
+        }
+        .rendered-content ul, .rendered-content ol {
+            font-size: 0.875em;
+            margin-left: 1.2em;
+            margin-bottom: 0.8em;
+            padding-left: 0.8em;
+        }
+        .rendered-content ul {
+            list-style-type: disc;
+        }
+        .rendered-content ol {
+            list-style-type: decimal;
+        }
+        .rendered-content ul ul {
+            list-style-type: circle;
+        }
+        .rendered-content ul ul ul {
+            list-style-type: square;
+        }
+        .rendered-content li {
+            font-size: 1em;
+            margin-bottom: 0.3em;
+            line-height: 1.6;
+        }
+        .rendered-content blockquote {
+            font-style: normal;
+            border-left: none;
+            padding: 0.6em;
+            position: relative;
+            line-height: 1.8;
+            border-radius: 0 0 0.6em 0.6em;
+            color: #FEEEED;
+            background: #000;
+            box-shadow: #84A1A8 0 0.6em 0.9em;
+            margin: 0.5em 0;
+        }
+        .rendered-content blockquote p {
+            color: #FEEEED !important;
+            font-size: 0.8em !important;
+            margin: 0 !important;
+            letter-spacing: normal !important;
+        }
+        .rendered-content img {
+            max-width: 100%;
+            border-radius: 8px;
+            margin-bottom: 0.8em;
+        }
+        .rendered-content pre {
+            margin: 0.5em 0;
+            padding: 0.5em;
+            border-radius: 4px;
+            line-height: 1.4;
+            overflow-x: auto;
+        }
+        .rendered-content code {
+            color: rgb(271,93,108);
+            background-color: #f3f4f6;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9em;
+        }
+        .rendered-content pre code {
+            background-color: transparent;
+            padding: 0;
+            color: inherit;
+        }
+        .rendered-content strong {
+            font-weight: bold;
+            color: rgb(248,57,41);
+        }
+        .rendered-content em {
+            color: rgb(248,57,41);
+            letter-spacing: 0.3em;
+        }
+        .rendered-content a {
+            color: rgb(248,57,41);
+            border-bottom: 1px solid #ff3502;
+            text-decoration: none;
+        }
+        .rendered-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 0.8em;
+            border: 1px solid #ddd;
+            background-color: #fff;
+        }
+        .rendered-content th, .rendered-content td {
+            font-size: 0.875em;
+            border: 1px solid #ddd;
+            padding: 0.5em 0.8em;
+            text-align: left;
+            vertical-align: top;
+            word-wrap: break-word;
+            max-width: 200px;
+        }
+        .rendered-content th {
+            font-weight: bold;
+            background-color: #f8f9fa;
+            color: #333;
+        }
+        .rendered-content tbody tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        .rendered-content tbody tr:hover {
+            background-color: #e9ecef;
+        }
+        .rendered-content hr {
+            height: 1px;
+            padding: 0;
+            border: none;
+            text-align: center;
+            background-image: linear-gradient(to right, rgba(248,57,41,0), rgba(248,57,41,0.75), rgba(248,57,41,0));
+            margin: 0.8em 0;
+        }
+
+        /* For the pagination algorithm */
+        #hidden-renderer {
+            position: absolute;
+            top: -9999px;
+            left: -9999px;
+            visibility: hidden;
+            width: 330px; /* Same as preview page */
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+    <div class="flex flex-col h-screen">
+        <!-- Header -->
+        <header class="bg-white/80 backdrop-blur-sm border-b border-gray-200/80 p-4 flex justify-between items-center z-20">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center text-white font-bold text-xl">
+                    <span>M</span>
+                </div>
+                <h1 class="text-xl font-bold text-gray-800">Markdown 智能分页切图工具</h1>
+            </div>
+            <div class="flex items-center gap-4">
+                <button id="export-zip-btn" class="bg-orange-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-orange-600 transition-colors flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                    导出图片 (ZIP)
+                </button>
+                 <div id="loading-indicator" class="hidden items-center gap-2">
+                    <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-orange-500"></div>
+                    <span>处理中...</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="flex flex-grow overflow-hidden">
+            <!-- Left: Controls -->
+            <aside class="w-1/3 min-w-[400px] max-w-[600px] bg-white border-r border-gray-200/80 flex flex-col p-6 overflow-y-auto">
+                <!-- Editor Section -->
+                <div class="flex-grow flex flex-col">
+                    <h2 class="text-lg font-bold mb-3">1. 编写内容</h2>
+                    <p class="text-sm text-gray-500 mb-4">在此处输入或粘贴您的 Markdown 内容。右侧将实时展示分页后的预览效果。</p>
+                    <textarea id="markdown-input" class="w-full flex-grow border border-gray-300 rounded-lg p-4 text-sm leading-6 resize-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition" spellcheck="false"></textarea>
+                </div>
+                <!-- Customization Section -->
+                <div class="mt-8">
+                    <h2 class="text-lg font-bold mb-4">2. 自定义样式</h2>
+                     <div class="grid grid-cols-3 gap-4">
+
+                        <div>
+                            <label for="font-select" class="block text-sm font-medium text-gray-700 mb-1">内容字体</label>
+                            <select id="font-select" class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-orange-500 focus:border-orange-500">
+                                <option value="PingFangSC-Light, 'Inter', 'Noto Serif SC', sans-serif">苹方轻体</option>
+                                <option value="'Inter', 'Noto Serif SC', sans-serif">现代无衬线</option>
+                                <option value="'Noto Serif SC', serif">典雅衬线体</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="padding-slider" class="block text-sm font-medium text-gray-700 mb-1">页面边距: <span id="padding-value">15</span>px</label>
+                            <input id="padding-slider" type="range" min="10" max="60" value="15" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                        <div>
+                            <label for="font-size-slider" class="block text-sm font-medium text-gray-700 mb-1">字体大小: <span id="font-size-value">13</span>px</label>
+                            <input id="font-size-slider" type="range" min="12" max="24" value="13" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                    </div>
+                </div>
+            </aside>
+            
+            <!-- Right: Preview -->
+            <main class="w-2/3 flex-grow bg-gray-100 p-8 overflow-y-auto">
+                <div id="preview-area" class="flex flex-wrap gap-8 justify-center">
+                    <!-- Preview pages will be generated here -->
+                </div>
+            </main>
+        </div>
+    </div>
+    
+    <!-- This is hidden. It's used to render the full content to calculate pagination -->
+    <div id="hidden-renderer"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Wait for all scripts to load
+            const checkLibraries = () => {
+                return window.marked && window.hljs && window.html2canvas && window.JSZip;
+            };
+
+            const initApp = () => {
+                // Configure marked.js with highlight.js for syntax highlighting
+                marked.use({
+                    renderer: {
+                        code(code, infostring) {
+                            const lang = infostring || 'plaintext';
+                            const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+                            const highlighted = hljs.highlight(code, { language, ignoreIllegals: true }).value;
+                            return `<pre><code class="hljs ${language}">${highlighted}</code></pre>`;
+                        }
+                    },
+                    gfm: true,
+                    breaks: true
+                });
+
+                // Elements
+                const markdownInput = document.getElementById('markdown-input');
+                const previewArea = document.getElementById('preview-area');
+                const hiddenRenderer = document.getElementById('hidden-renderer');
+
+                const fontSelect = document.getElementById('font-select');
+                const paddingSlider = document.getElementById('padding-slider');
+                const paddingValue = document.getElementById('padding-value');
+                const fontSizeSlider = document.getElementById('font-size-slider');
+                const fontSizeValue = document.getElementById('font-size-value');
+                const exportBtn = document.getElementById('export-zip-btn');
+                const loadingIndicator = document.getElementById('loading-indicator');
+
+                // Default content
+                const defaultMarkdown = `# 欢迎使用 Markdown 长图分页工具
+
+## 功能特点
+
+这是一个智能的 Markdown 渲染工具，可以将你的文档转换为美观的图片序列。
+
+### 支持的功能
+
+- **实时预览**：左侧编辑，右侧实时显示分页效果
+- **智能分页**：自动识别内容块，避免不合理的截断
+- **复古主题**：采用复古牛皮纸风格，温馨典雅
+- **代码高亮**：支持多种编程语言的语法高亮
+
+### 示例代码
+
+\`\`\`javascript
+function generatePages(markdown) {
+  const html = parseMarkdown(markdown);
+  const pages = paginateContent(html);
+  return pages;
+}
+\`\`\`
+
+### 使用场景
+
+1. **知识分享**：将技术文档转换为图片，方便在社交媒体分享
+2. **笔记整理**：将学习笔记制作成图片格式，便于移动端查看
+3. **教程制作**：创建step-by-step的教程图片
+
+### 宽表格示例
+
+下面是一个宽表格，系统会自动将其转换为图片以便更好地显示：
+
+| 指标/季度 | 2023Q2 | 2023Q3 | 2023Q4 | 2024Q1 | 2024Q2 | 2024Q3 | 2024Q4 | 2025Q1 | 评级 |
+|----------|--------|--------|--------|--------|--------|--------|--------|--------|---------|
+| 营业收入(亿元) | 749.45 | 750.63 | 1183.95 | 747.77 | 756.40 | 799.79 | 1532.23 | 789.28 | 优秀 |
+| 净利润(亿元) | 39.46 | 61.19 | 133.94 | 76.49 | 108.27 | 112.02 | 197.15 | 124.65 | 极佳 |
+| 资产总计(亿元) | 3265.50 | 3308.05 | 3430.06 | 3559.07 | 3688.76 | 3780.56 | 3966.11 | 4116.47 | 中等 |
+| 负债合计(亿元) | 1924.69 | 1952.57 | 2046.43 | 2074.76 | 2089.84 | 2093.79 | 2188.80 | 2259.51 | 中等 |
+| 固定资产(亿元) | 794.31 | 806.41 | 814.66 | 813.63 | 835.87 | 850.76 | 923.07 | 927.22 | 中等 |
+
+> 💡 **提示**：在左侧编辑器中输入你的 Markdown 内容，右侧会实时显示分页效果。
+
+---
+
+**开始编辑吧！** 🚀`;
+
+                markdownInput.value = defaultMarkdown;
+
+                // Define themes first
+                const themes = {
+                    vintage: {
+                        name: '复古牛皮纸',
+                        background: '#f4f1e8',
+                        text: '#5d4037',
+                        accent: '#8d6e63',
+                        border: '#d7ccc8',
+                        codeBackground: '#efebe9'
+                    }
+                };
+
+
+
+                // App State
+                const state = {
+                    markdown: markdownInput.value,
+                    theme: 'vintage',
+                    fontFamily: "PingFangSC-Light, 'Inter', 'Noto Serif SC', sans-serif",
+                    padding: 15,
+                    fontSize: 13,
+                };
+
+
+                
+                // --- RENDER & PAGINATION LOGIC ---
+                
+                async function renderAndPaginate() {
+                    try {
+                        // 1. 处理\n符号，将其转换为实际换行
+                        const processedMarkdown = state.markdown.replace(/\\n/g, '\n');
+                        
+                        // 2. Parse Markdown to HTML
+                        const rawHtml = marked.parse(processedMarkdown);
+                        
+                        // 2. Style the hidden renderer for measurement
+                        hiddenRenderer.className = `rendered-content`;
+                        hiddenRenderer.style.padding = `${state.padding}px`;
+                        hiddenRenderer.style.fontSize = `${state.fontSize}px`;
+                        hiddenRenderer.style.fontFamily = state.fontFamily;
+                        hiddenRenderer.innerHTML = rawHtml;
+                        
+                        // Clear previous preview
+                        previewArea.innerHTML = '';
+                        
+                        const pageHeight = 440; // Fixed page height
+                        const contentHeight = pageHeight - (state.padding * 2);
+
+                        let currentPageDiv;
+                        let pageContentDiv;
+
+                        function createNewPage() {
+                            currentPageDiv = document.createElement('div');
+                            currentPageDiv.className = 'preview-page';
+                            
+                            pageContentDiv = document.createElement('div');
+                            pageContentDiv.className = 'rendered-content preview-page-content';
+                            pageContentDiv.style.padding = `${state.padding}px`;
+                            pageContentDiv.style.fontSize = `${state.fontSize}px`;
+                            pageContentDiv.style.fontFamily = state.fontFamily;
+                            pageContentDiv.style.minHeight = `${contentHeight}px`;
+                            pageContentDiv.style.height = 'auto';
+                            pageContentDiv.style.overflow = 'visible';
+                            pageContentDiv.style.wordWrap = 'break-word';
+                            pageContentDiv.style.hyphens = 'auto';
+
+                            applyTheme(currentPageDiv, pageContentDiv);
+                            
+                            currentPageDiv.appendChild(pageContentDiv);
+                            previewArea.appendChild(currentPageDiv);
+                            
+                            console.log(`Created new page. Content height: ${contentHeight}px, Page height: ${pageHeight}px, Padding: ${state.padding}px`);
+                        }
+
+                        // 智能分页算法 - 保持内容连贯性
+                        createNewPage();
+                        const elements = Array.from(hiddenRenderer.children);
+                        
+                        console.log('Total elements:', elements.length);
+                        elements.forEach((el, i) => {
+                            const text = el.textContent?.trim() || '';
+                            console.log(`Element ${i}:`, el.tagName, text.length > 50 ? text.substring(0, 50) + '...' : text);
+                        });
+
+                        const isHeader = (element) => {
+                            return element.tagName && ['H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(element.tagName);
+                        };
+
+                        // 处理宽表格转换为图片的函数
+                        async function convertWideTableToImage(tableElement) {
+                            try {
+                                // 创建一个临时容器来渲染表格
+                                const tempContainer = document.createElement('div');
+                                tempContainer.style.position = 'absolute';
+                                tempContainer.style.top = '-9999px';
+                                tempContainer.style.left = '-9999px';
+                                tempContainer.style.backgroundColor = 'white';
+                                tempContainer.style.padding = '20px';
+                                tempContainer.style.fontFamily = state.fontFamily;
+                                tempContainer.style.fontSize = state.fontSize + 'px';
+                                
+                                // 克隆表格并设置样式
+                                const clonedTable = tableElement.cloneNode(true);
+                                clonedTable.style.width = 'auto';
+                                clonedTable.style.minWidth = 'max-content';
+                                clonedTable.style.borderCollapse = 'collapse';
+                                clonedTable.style.border = '1px solid #ddd';
+                                clonedTable.style.backgroundColor = '#fff';
+                                
+                                // 设置单元格样式
+                                clonedTable.querySelectorAll('th, td').forEach(cell => {
+                                    cell.style.border = '1px solid #ddd';
+                                    cell.style.padding = '8px 12px';
+                                    cell.style.textAlign = 'left';
+                                    cell.style.verticalAlign = 'top';
+                                    cell.style.whiteSpace = 'nowrap';
+                                    cell.style.maxWidth = 'none';
+                                });
+                                
+                                clonedTable.querySelectorAll('th').forEach(th => {
+                                    th.style.fontWeight = 'bold';
+                                    th.style.backgroundColor = '#f8f9fa';
+                                    th.style.color = '#333';
+                                });
+                                
+                                tempContainer.appendChild(clonedTable);
+                                document.body.appendChild(tempContainer);
+                                
+                                // 使用html2canvas转换为图片
+                                const canvas = await html2canvas(tempContainer, {
+                                    backgroundColor: 'white',
+                                    scale: 2,
+                                    useCORS: true,
+                                    allowTaint: true
+                                });
+                                
+                                // 清理临时容器
+                                document.body.removeChild(tempContainer);
+                                
+                                // 创建图片元素
+                                const img = document.createElement('img');
+                                img.src = canvas.toDataURL('image/png');
+                                img.style.maxWidth = '100%';
+                                img.style.height = 'auto';
+                                img.style.border = '1px solid #ddd';
+                                img.style.borderRadius = '4px';
+                                img.style.display = 'block';
+                                img.style.margin = '10px auto';
+                                
+                                return img;
+                            } catch (error) {
+                                console.error('转换表格为图片失败:', error);
+                                return tableElement.cloneNode(true);
+                            }
+                        }
+
+                        // 按行分页处理文本元素的函数
+                        async function processTextElementByLines(element, elementIndex) {
+                            const textContent = element.textContent?.trim() || '';
+                            if (!textContent) return;
+                            
+                            console.log(`Processing text element by lines: ${element.tagName}`);
+                            
+                            // 创建一个临时元素来测量行高
+                            const tempElement = element.cloneNode(true);
+                            tempElement.style.position = 'absolute';
+                            tempElement.style.visibility = 'hidden';
+                            tempElement.style.width = `${pageContentDiv.offsetWidth}px`;
+                            tempElement.style.height = 'auto';
+                            tempElement.style.whiteSpace = 'normal';
+                            tempElement.style.wordWrap = 'break-word';
+                            document.body.appendChild(tempElement);
+                            
+                            // 获取单行高度
+                            const originalText = tempElement.textContent;
+                            tempElement.textContent = 'A';
+                            const lineHeight = tempElement.offsetHeight;
+                            tempElement.textContent = originalText;
+                            const totalHeight = tempElement.offsetHeight;
+                            const totalLines = Math.ceil(totalHeight / lineHeight);
+                            
+                            console.log(`Element has ${totalLines} lines, line height: ${lineHeight}px`);
+                            
+                            // 如果只有一行或者是特殊元素，直接按整个元素处理
+                            if (totalLines <= 1 || element.tagName === 'H1' || element.tagName === 'H2' || 
+                                element.tagName === 'H3' || element.tagName === 'H4' || element.tagName === 'H5' || element.tagName === 'H6') {
+                                document.body.removeChild(tempElement);
+                                return await processElementAsWhole(element, elementIndex);
+                            }
+                            
+                            // 分割文本为单词
+                            const words = originalText.split(/\s+/);
+                            let currentText = '';
+                            let currentElement = null;
+                            
+                            for (let i = 0; i < words.length; i++) {
+                                const testText = currentText ? currentText + ' ' + words[i] : words[i];
+                                tempElement.textContent = testText;
+                                
+                                const testHeight = tempElement.offsetHeight;
+                                
+                                // 临时添加到页面测试实际高度
+                                const testElement = element.cloneNode(false);
+                                testElement.textContent = testText;
+                                pageContentDiv.appendChild(testElement);
+                                const wouldExceedHeight = pageContentDiv.scrollHeight > contentHeight + 20;
+                                pageContentDiv.removeChild(testElement);
+                                
+                                // 如果添加这个单词会超出当前页面高度
+                                if (wouldExceedHeight && currentText) {
+                                    // 创建当前行的元素并添加到页面
+                                    if (!currentElement) {
+                                        currentElement = element.cloneNode(false);
+                                    }
+                                    currentElement.textContent = currentText;
+                                    
+                                    // 如果当前页面为空，直接添加
+                                    if (pageContentDiv.children.length === 0) {
+                                        pageContentDiv.appendChild(currentElement);
+                                    } else {
+                                        // 测试是否能放入当前页面
+                                        pageContentDiv.appendChild(currentElement);
+                                        if (pageContentDiv.scrollHeight > contentHeight + 20) {
+                                            pageContentDiv.removeChild(currentElement);
+                                            createNewPage();
+                                            pageContentDiv.appendChild(currentElement);
+                                        }
+                                    }
+                                    
+                                    // 重置当前文本和元素
+                                    currentText = words[i];
+                                    currentElement = null;
+                                } else {
+                                    currentText = testText;
+                                }
+                            }
+                            
+                            // 处理剩余的文本
+                            if (currentText) {
+                                if (!currentElement) {
+                                    currentElement = element.cloneNode(false);
+                                }
+                                currentElement.textContent = currentText;
+                                
+                                if (pageContentDiv.children.length === 0) {
+                                    pageContentDiv.appendChild(currentElement);
+                                } else {
+                                    pageContentDiv.appendChild(currentElement);
+                                    if (pageContentDiv.scrollHeight > contentHeight + 20) {
+                                        pageContentDiv.removeChild(currentElement);
+                                        createNewPage();
+                                        pageContentDiv.appendChild(currentElement);
+                                    }
+                                }
+                            }
+                            
+                            document.body.removeChild(tempElement);
+                        }
+                        
+                        // 按整个元素处理的函数（用于表格、图片、链接等不可分割的元素）
+                        async function processElementAsWhole(element, elementIndex) {
+                            // 更宽松的空白元素过滤 - 只过滤真正的空元素
+                            const textContent = element.textContent?.trim() || '';
+                            const hasContent = textContent.length > 0 || 
+                                             element.tagName === 'HR' || 
+                                             element.tagName === 'IMG' ||
+                                             element.tagName === 'BR' ||
+                                             element.querySelector('img, hr, br');
+                            
+                            if (!hasContent) {
+                                console.log(`Skipping empty element ${elementIndex}:`, element.tagName);
+                                return;
+                            }
+
+                            const displayText = textContent.length > 30 ? textContent.substring(0, 30) + '...' : textContent;
+                            console.log(`Adding element ${elementIndex}:`, element.tagName, displayText);
+                            
+                            let clonedElement;
+                            
+                            // 检查是否为宽表格
+                            if (element.tagName === 'TABLE') {
+                                // 计算表格的列数
+                                const firstRow = element.querySelector('tr');
+                                const columnCount = firstRow ? firstRow.children.length : 0;
+                                
+                                // 如果列数超过4列，转换为图片
+                                if (columnCount > 4) {
+                                    console.log(`Converting wide table with ${columnCount} columns to image`);
+                                    clonedElement = await convertWideTableToImage(element);
+                                } else {
+                                    clonedElement = element.cloneNode(true);
+                                }
+                            } else {
+                                clonedElement = element.cloneNode(true);
+                            }
+                            
+                            // 如果当前页面为空，直接添加第一个元素（避免第一页空白）
+                            if (pageContentDiv.children.length === 0) {
+                                pageContentDiv.appendChild(clonedElement);
+                                console.log(`First element added to page.`);
+                                return;
+                            }
+                            
+                            // 临时添加到当前页面以测试高度
+                            pageContentDiv.appendChild(clonedElement);
+                            pageContentDiv.offsetHeight;
+                            const currentHeight = pageContentDiv.scrollHeight;
+                            
+                            console.log(`Page height after adding: ${currentHeight}/${contentHeight}`);
+
+                            // 检查是否超出页面高度（使用更宽松的容错值）
+                            if (currentHeight > contentHeight + 20) {
+                                console.log(`Page overflow! Current: ${currentHeight}px, Limit: ${contentHeight + 20}px`);
+                                // 移除刚添加的元素（因为放不下）
+                                pageContentDiv.removeChild(clonedElement);
+                                
+                                // 创建新页面
+                                console.log(`Creating new page. Previous page has ${pageContentDiv.children.length} elements.`);
+                                createNewPage();
+                                
+                                // 将元素添加到新页面
+                                pageContentDiv.appendChild(clonedElement);
+                                console.log(`Element added to new page.`);
+                            } else {
+                                console.log(`Element fits on current page. Height: ${currentHeight}/${contentHeight + 20}`);
+                            }
+                        }
+                        
+                        // 处理元素的主函数，根据元素类型选择处理方式
+                        async function processElement(element, elementIndex) {
+                            // 不可分割的元素类型：表格、图片、链接、水平线、代码块等
+                            const indivisibleElements = ['TABLE', 'IMG', 'A', 'HR', 'PRE', 'CODE', 'BLOCKQUOTE'];
+                            
+                            if (indivisibleElements.includes(element.tagName) || 
+                                element.querySelector('img, a, table, hr, pre, code')) {
+                                // 按整个元素处理
+                                return await processElementAsWhole(element, elementIndex);
+                            } else {
+                                // 按行分页处理
+                                return await processTextElementByLines(element, elementIndex);
+                            }
+                        }
+
+                        // 处理列表项分页的函数
+                        function processListElement(listElement, elementIndex) {
+                            const listItems = Array.from(listElement.children);
+                            if (listItems.length === 0) {
+                                processElement(listElement, elementIndex);
+                                return;
+                            }
+
+                            console.log(`Processing list with ${listItems.length} items`);
+                            
+                            // 创建一个新的列表容器
+                            let currentList = document.createElement(listElement.tagName);
+                            currentList.className = listElement.className;
+                            
+                            // 保持有序列表的起始序号
+                            let currentStartNumber = 1;
+                            if (listElement.tagName === 'OL') {
+                                const startAttr = listElement.getAttribute('start');
+                                currentStartNumber = startAttr ? parseInt(startAttr) : 1;
+                                currentList.setAttribute('start', currentStartNumber);
+                            }
+                            
+                            for (let i = 0; i < listItems.length; i++) {
+                                const listItem = listItems[i];
+                                const clonedItem = listItem.cloneNode(true);
+                                
+                                // 创建临时列表来测试高度
+                                const tempList = currentList.cloneNode(true);
+                                tempList.appendChild(clonedItem);
+                                
+                                // 如果当前页面为空，直接添加列表
+                                if (pageContentDiv.children.length === 0) {
+                                    currentList.appendChild(clonedItem);
+                                    pageContentDiv.appendChild(currentList);
+                                    console.log(`First list item added to page.`);
+                                    continue;
+                                }
+                                
+                                // 临时添加到当前页面以测试高度
+                                const existingList = pageContentDiv.querySelector(listElement.tagName.toLowerCase() + ':last-child');
+                                if (existingList && existingList.tagName === listElement.tagName) {
+                                    existingList.appendChild(clonedItem);
+                                    pageContentDiv.offsetHeight;
+                                    const currentHeight = pageContentDiv.scrollHeight;
+                                    
+                                    if (currentHeight > contentHeight + 20) {
+                                        // 移除刚添加的项目
+                                        existingList.removeChild(clonedItem);
+                                        
+                                        // 创建新页面
+                                        createNewPage();
+                                        
+                                        // 在新页面创建新列表，保持序号连续性
+                                        currentList = document.createElement(listElement.tagName);
+                                        currentList.className = listElement.className;
+                                        
+                                        // 为有序列表设置正确的起始序号
+                                        if (listElement.tagName === 'OL') {
+                                            const newStartNumber = currentStartNumber + i;
+                                            currentList.setAttribute('start', newStartNumber);
+                                            console.log(`Setting OL start number to ${newStartNumber}`);
+                                        }
+                                        
+                                        currentList.appendChild(clonedItem);
+                                        pageContentDiv.appendChild(currentList);
+                                        console.log(`List item moved to new page.`);
+                                    } else {
+                                        console.log(`List item fits on current page.`);
+                                    }
+                                } else {
+                                    // 没有现有列表，创建新的
+                                    currentList = document.createElement(listElement.tagName);
+                                    currentList.className = listElement.className;
+                                    
+                                    // 为有序列表设置正确的起始序号
+                                    if (listElement.tagName === 'OL') {
+                                        const newStartNumber = currentStartNumber + i;
+                                        currentList.setAttribute('start', newStartNumber);
+                                        console.log(`Setting OL start number to ${newStartNumber}`);
+                                    }
+                                    
+                                    currentList.appendChild(clonedItem);
+                                    pageContentDiv.appendChild(currentList);
+                                }
+                            }
+                        }
+
+                        // 遍历所有元素进行分页（支持异步处理）
+                        for (let i = 0; i < elements.length; i++) {
+                            const element = elements[i];
+                            
+                            // 特殊处理列表元素
+                            if (element.tagName === 'UL' || element.tagName === 'OL') {
+                                processListElement(element, i);
+                            } else {
+                                await processElement(element, i);
+                            }
+                        }
+                        
+                        // 调整最后一页的高度以适应实际内容
+                        if (pageContentDiv && pageContentDiv.children.length > 0) {
+                            const actualHeight = pageContentDiv.scrollHeight;
+                            const minRequiredHeight = actualHeight + (state.padding * 2);
+                            if (minRequiredHeight < pageHeight) {
+                                pageContentDiv.style.height = `${actualHeight}px`;
+                                pageContentDiv.style.minHeight = 'auto';
+                                pageContentDiv.style.maxHeight = 'none';
+                                currentPageDiv.style.height = `${minRequiredHeight}px`;
+                                console.log(`Adjusted last page height to ${minRequiredHeight}px (content: ${actualHeight}px)`);
+                            }
+                        }
+
+                    } catch (error) {
+                        console.error('Error in renderAndPaginate:', error);
+                    }
+                }
+
+                
+
+                function applyTheme(pageContainer, contentContainer) {
+                    console.log('applyTheme called with theme:', state.theme);
+                    const currentTheme = themes[state.theme] || themes.vintage;
+                    console.log('Theme object:', currentTheme);
+                    const pageBg = currentTheme.background;
+                    const textColor = currentTheme.text;
+                    const accentColor = currentTheme.accent;
+                    const borderColor = currentTheme.border;
+                    const codeBackground = currentTheme.codeBackground;
+                    
+                    pageContainer.style.backgroundColor = pageBg;
+                    contentContainer.style.color = textColor;
+                    
+                    // 清除之前的主题样式，但保留基础样式
+                    contentContainer.querySelectorAll('*').forEach(el => {
+                        // 只重置主题相关的样式属性
+                        el.style.color = '';
+                        el.style.backgroundColor = '';
+                        el.style.borderColor = '';
+                        el.style.borderLeft = '';
+                        el.style.borderBottom = '';
+                        el.style.background = '';
+                        el.style.boxShadow = '';
+                        // 移除之前添加的内容包装器
+                        const contentSpan = el.querySelector('.content');
+                        if (contentSpan) {
+                            el.textContent = contentSpan.textContent;
+                        }
+                        // 移除引号元素
+                        const quoteBefore = el.querySelector('.quote-before');
+                        const quoteAfter = el.querySelector('.quote-after');
+                        if (quoteBefore) quoteBefore.remove();
+                        if (quoteAfter) quoteAfter.remove();
+                    });
+                    
+                    // 应用vintage主题的基本样式
+                    // H1-H6 标题样式
+                    contentContainer.querySelectorAll('h1').forEach(h1 => {
+                        h1.style.color = accentColor;
+                        h1.style.fontWeight = 'bold';
+                        h1.style.fontSize = '2em';
+                        h1.style.margin = '0.67em 0';
+                        h1.style.lineHeight = '1.2';
+                    });
+                    
+                    contentContainer.querySelectorAll('h2').forEach(h2 => {
+                        h2.style.color = accentColor;
+                        h2.style.fontWeight = 'bold';
+                        h2.style.fontSize = '1.5em';
+                        h2.style.margin = '0.83em 0';
+                        h2.style.lineHeight = '1.3';
+                    });
+                    
+                    contentContainer.querySelectorAll('h3').forEach(h3 => {
+                        h3.style.color = accentColor;
+                        h3.style.fontWeight = 'bold';
+                        h3.style.fontSize = '1.17em';
+                        h3.style.margin = '1em 0';
+                        h3.style.lineHeight = '1.4';
+                    });
+                    
+                    contentContainer.querySelectorAll('h4').forEach(h4 => {
+                        h4.style.color = accentColor;
+                        h4.style.fontWeight = 'bold';
+                        h4.style.fontSize = '1em';
+                        h4.style.margin = '1.33em 0';
+                        h4.style.lineHeight = '1.4';
+                    });
+                    
+                    contentContainer.querySelectorAll('h5').forEach(h5 => {
+                        h5.style.color = accentColor;
+                        h5.style.fontWeight = 'bold';
+                        h5.style.fontSize = '0.83em';
+                        h5.style.margin = '1.67em 0';
+                        h5.style.lineHeight = '1.4';
+                    });
+                    
+                    contentContainer.querySelectorAll('h6').forEach(h6 => {
+                        h6.style.color = accentColor;
+                        h6.style.fontWeight = 'bold';
+                        h6.style.fontSize = '0.67em';
+                        h6.style.margin = '2.33em 0';
+                        h6.style.lineHeight = '1.4';
+                    });
+                    
+                    contentContainer.querySelectorAll('blockquote').forEach(bq => {
+                        bq.style.borderColor = accentColor;
+                        bq.style.color = textColor;
+                        bq.style.opacity = '0.8';
+                    });
+                    
+                    contentContainer.querySelectorAll('a').forEach(link => {
+                        link.style.color = accentColor;
+                        link.style.textDecoration = 'underline';
+                    });
+
+                    
+                    // 通用样式
+                    contentContainer.querySelectorAll('th').forEach(th => {
+                        th.style.backgroundColor = codeBackground;
+                        th.style.color = textColor;
+                        th.style.borderColor = borderColor;
+                    });
+                    
+                    contentContainer.querySelectorAll('td').forEach(td => {
+                        td.style.borderColor = borderColor;
+                    });
+                    
+                    contentContainer.querySelectorAll('code:not(pre code)').forEach(code => {
+                        code.style.backgroundColor = codeBackground;
+                        code.style.color = textColor;
+                        code.style.padding = '2px 4px';
+                        code.style.borderRadius = '3px';
+                    });
+                    
+                    contentContainer.querySelectorAll('hr').forEach(hr => {
+                        hr.style.borderColor = borderColor;
+                    });
+                }
+
+                // --- EVENT LISTENERS ---
+
+                markdownInput.addEventListener('input', (e) => {
+                    state.markdown = e.target.value;
+                    renderAndPaginate();
+                });
+
+
+                
+                fontSelect.addEventListener('change', (e) => {
+                    state.fontFamily = e.target.value;
+                    renderAndPaginate();
+                });
+
+                paddingSlider.addEventListener('input', (e) => {
+                    state.padding = parseInt(e.target.value);
+                    paddingValue.textContent = state.padding;
+                    renderAndPaginate();
+                });
+                
+                fontSizeSlider.addEventListener('input', (e) => {
+                    state.fontSize = parseInt(e.target.value);
+                    fontSizeValue.textContent = state.fontSize;
+                    renderAndPaginate();
+                });
+
+                // --- EXPORT LOGIC ---
+                exportBtn.addEventListener('click', async () => {
+                    loadingIndicator.classList.remove('hidden');
+                    loadingIndicator.classList.add('flex');
+                    exportBtn.disabled = true;
+                    
+                    try {
+                        const zip = new JSZip();
+                        const pages = previewArea.querySelectorAll('.preview-page');
+
+                        for (let i = 0; i < pages.length; i++) {
+                            const page = pages[i];
+                            try {
+                                const canvas = await html2canvas(page, {
+                                    scale: 1080 / page.offsetWidth, // Export at 1080p width
+                                    useCORS: true,
+                                    backgroundColor: null,
+                                });
+                                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                                zip.file(`page-${String(i + 1).padStart(2, '0')}.png`, blob);
+                            } catch (error) {
+                                console.error('Error generating canvas for page', i, error);
+                            }
+                        }
+                        
+                        const content = await zip.generateAsync({type: "blob"});
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(content);
+                        link.download = "markdown_pages.zip";
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    } catch(error) {
+                        console.error('Error in export process', error);
+                    } finally {
+                        loadingIndicator.classList.add('hidden');
+                        loadingIndicator.classList.remove('flex');
+                        exportBtn.disabled = false;
+                    }
+                });
+                
+
+                
+                // 设置字体选择器默认值
+                fontSelect.value = state.fontFamily;
+                
+
+                
+                // 设置滑块默认值与state同步
+                paddingSlider.value = state.padding;
+                paddingValue.textContent = state.padding;
+                fontSizeSlider.value = state.fontSize;
+                fontSizeValue.textContent = state.fontSize;
+                
+                // Initial render
+                renderAndPaginate();
+            };
+
+            // Check if libraries are loaded, if not wait and retry
+            if (checkLibraries()) {
+                initApp();
+            } else {
+                setTimeout(() => {
+                    if (checkLibraries()) {
+                        initApp();
+                    } else {
+                        console.error('Required libraries failed to load');
+                    }
+                }, 1000);
+            }
+        });
+    </script>
+</body>
+</html>
