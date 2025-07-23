@@ -412,6 +412,7 @@ function generatePages(markdown) {
                         function createNewPage() {
                             currentPageDiv = document.createElement('div');
                             currentPageDiv.className = 'preview-page';
+                            currentPageDiv.style.position = 'relative';
                             
                             pageContentDiv = document.createElement('div');
                             pageContentDiv.className = 'rendered-content preview-page-content';
@@ -424,9 +425,25 @@ function generatePages(markdown) {
                             pageContentDiv.style.wordWrap = 'break-word';
                             pageContentDiv.style.hyphens = 'auto';
 
+                            // 创建水印元素
+                            const watermark = document.createElement('div');
+                            watermark.textContent = '使用「口袋分析师」微信小程序生成  可生成任意公司同款报告';
+                            watermark.style.position = 'absolute';
+                            watermark.style.bottom = '8px';
+                            watermark.style.right = '12px';
+                            watermark.style.fontSize = '11px';
+                            watermark.style.color = '#28A745';
+                            watermark.style.opacity = '0.9';
+                            watermark.style.fontFamily = 'PingFangSC-Light, Inter, sans-serif';
+                            watermark.style.fontWeight = 'bold';
+                            watermark.style.pointerEvents = 'none';
+                            watermark.style.userSelect = 'none';
+                            watermark.style.zIndex = '1000';
+
                             applyTheme(currentPageDiv, pageContentDiv);
                             
                             currentPageDiv.appendChild(pageContentDiv);
+                            currentPageDiv.appendChild(watermark);
                             previewArea.appendChild(currentPageDiv);
                             
                             console.log(`Created new page. Content height: ${contentHeight}px, Page height: ${pageHeight}px, Padding: ${state.padding}px`);
@@ -532,10 +549,10 @@ function generatePages(markdown) {
                             document.body.appendChild(tempElement);
                             
                             // 获取单行高度
-                            const originalText = tempElement.textContent;
+                            const originalHTML = tempElement.innerHTML;
                             tempElement.textContent = 'A';
                             const lineHeight = tempElement.offsetHeight;
-                            tempElement.textContent = originalText;
+                            tempElement.innerHTML = originalHTML;
                             const totalHeight = tempElement.offsetHeight;
                             const totalLines = Math.ceil(totalHeight / lineHeight);
                             
@@ -548,8 +565,18 @@ function generatePages(markdown) {
                                 return await processElementAsWhole(element, elementIndex);
                             }
                             
+                            // 对于包含HTML标记的元素，使用更智能的分割方法
+                            // 检查是否包含HTML标记
+                            const hasHTMLTags = element.innerHTML !== element.textContent;
+                            
+                            if (hasHTMLTags) {
+                                // 如果包含HTML标记，按整个元素处理以保持格式
+                                document.body.removeChild(tempElement);
+                                return await processElementAsWhole(element, elementIndex);
+                            }
+                            
                             // 分割文本为单词
-                            const words = originalText.split(/\s+/);
+                            const words = textContent.split(/\s+/);
                             let currentText = '';
                             let currentElement = null;
                             
