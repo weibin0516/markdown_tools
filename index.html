@@ -21,7 +21,7 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Noto+Serif+SC:wght@400;700&display=swap');
         
         body {
-            font-family: 'PingFangSC-Light', 'Inter', 'Noto Serif SC', sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
             background-color: #F8F5F2; /* Warm Neutral Background */
         }
         .preview-page {
@@ -244,7 +244,7 @@
                         <div>
                             <label for="font-select" class="block text-sm font-medium text-gray-700 mb-1">内容字体</label>
                             <select id="font-select" class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-orange-500 focus:border-orange-500">
-                                <option value="PingFangSC-Light, 'Inter', 'Noto Serif SC', sans-serif">苹方轻体</option>
+                                <option value="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif">系统默认字体</option>
                                 <option value="'Inter', 'Noto Serif SC', sans-serif">现代无衬线</option>
                                 <option value="'Noto Serif SC', serif">典雅衬线体</option>
                             </select>
@@ -376,7 +376,7 @@ function generatePages(markdown) {
                 const state = {
                     markdown: markdownInput.value,
                     theme: 'vintage',
-                    fontFamily: "PingFangSC-Light, 'Inter', 'Noto Serif SC', sans-serif",
+                    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif",
                     padding: 15,
                     fontSize: 13,
                 };
@@ -434,7 +434,7 @@ function generatePages(markdown) {
                             watermark.style.fontSize = '11px';
                             watermark.style.color = '#28A745';
                             watermark.style.opacity = '0.9';
-                            watermark.style.fontFamily = 'PingFangSC-Light, Inter, sans-serif';
+                            watermark.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
                             watermark.style.fontWeight = 'bold';
                             watermark.style.pointerEvents = 'none';
                             watermark.style.userSelect = 'none';
