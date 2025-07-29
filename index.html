@@ -258,6 +258,12 @@
                             <input id="font-size-slider" type="range" min="12" max="24" value="13" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
                         </div>
                     </div>
+                    <div class="mt-4">
+                        <div class="flex items-center">
+                            <input id="watermark-checkbox" type="checkbox" checked class="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded">
+                            <label for="watermark-checkbox" class="ml-2 block text-sm font-medium text-gray-700">显示水印</label>
+                        </div>
+                    </div>
                 </div>
             </aside>
             
@@ -305,6 +311,7 @@
                 const paddingValue = document.getElementById('padding-value');
                 const fontSizeSlider = document.getElementById('font-size-slider');
                 const fontSizeValue = document.getElementById('font-size-value');
+                const watermarkCheckbox = document.getElementById('watermark-checkbox');
                 const exportBtn = document.getElementById('export-zip-btn');
                 const loadingIndicator = document.getElementById('loading-indicator');
 
@@ -379,6 +386,7 @@ function generatePages(markdown) {
                     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif",
                     padding: 15,
                     fontSize: 13,
+                    showWatermark: true,
                 };
 
 
@@ -425,25 +433,27 @@ function generatePages(markdown) {
                             pageContentDiv.style.wordWrap = 'break-word';
                             pageContentDiv.style.hyphens = 'auto';
 
-                            // 创建水印元素
-                            const watermark = document.createElement('div');
-                            watermark.textContent = '使用「口袋分析师」微信小程序生成  可生成任意公司同款报告';
-                            watermark.style.position = 'absolute';
-                            watermark.style.bottom = '8px';
-                            watermark.style.right = '12px';
-                            watermark.style.fontSize = '11px';
-                            watermark.style.color = '#28A745';
-                            watermark.style.opacity = '0.9';
-                            watermark.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
-                            watermark.style.fontWeight = 'bold';
-                            watermark.style.pointerEvents = 'none';
-                            watermark.style.userSelect = 'none';
-                            watermark.style.zIndex = '1000';
+                            // 创建水印元素（如果启用）
+                            if (state.showWatermark) {
+                                const watermark = document.createElement('div');
+                                watermark.textContent = '使用「口袋分析师」微信小程序生成  可生成任意公司同款报告';
+                                watermark.style.position = 'absolute';
+                                watermark.style.bottom = '8px';
+                                watermark.style.right = '12px';
+                                watermark.style.fontSize = '11px';
+                                watermark.style.color = '#28A745';
+                                watermark.style.opacity = '0.9';
+                                watermark.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+                                watermark.style.fontWeight = 'bold';
+                                watermark.style.pointerEvents = 'none';
+                                watermark.style.userSelect = 'none';
+                                watermark.style.zIndex = '1000';
+                                currentPageDiv.appendChild(watermark);
+                            }
 
                             applyTheme(currentPageDiv, pageContentDiv);
                             
                             currentPageDiv.appendChild(pageContentDiv);
-                            currentPageDiv.appendChild(watermark);
                             previewArea.appendChild(currentPageDiv);
                             
                             console.log(`Created new page. Content height: ${contentHeight}px, Page height: ${pageHeight}px, Padding: ${state.padding}px`);
@@ -1012,6 +1022,11 @@ function generatePages(markdown) {
                     renderAndPaginate();
                 });
 
+                watermarkCheckbox.addEventListener('change', (e) => {
+                    state.showWatermark = e.target.checked;
+                    renderAndPaginate();
+                });
+
                 // --- EXPORT LOGIC ---
                 exportBtn.addEventListener('click', async () => {
                     loadingIndicator.classList.remove('hidden');
@@ -1058,13 +1073,14 @@ function generatePages(markdown) {
                 // 设置字体选择器默认值
                 fontSelect.value = state.fontFamily;
                 
-
-                
                 // 设置滑块默认值与state同步
                 paddingSlider.value = state.padding;
                 paddingValue.textContent = state.padding;
                 fontSizeSlider.value = state.fontSize;
                 fontSizeValue.textContent = state.fontSize;
+                
+                // 设置水印复选框默认值
+                watermarkCheckbox.checked = state.showWatermark;
                 
                 // Initial render
                 renderAndPaginate();
