@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>交互式原型：Markdown 智能分页切图工具</title>
+    <title>Markdown 智能分页切图工具</title>
     
     <!-- Chosen Palette: Warm Neutrals -->
     <!-- Application Structure Plan: 采用经典的双栏布局。左侧为控制面板，包含Markdown编辑器和所有样式自定义选项，使用户可以方便地输入内容并调整外观。右侧为实时预览区域，即时反馈用户的每一次修改，忠实模拟最终的图片分页效果。这种结构将“输入/控制”与“输出/结果”清晰分离，符合创作者工具的直觉，实现了“所见即所得”的核心用户流程：编辑 -> 预览 -> 调整 -> 导出。 -->
@@ -14,6 +14,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dom-to-image/2.6.0/dom-to-image.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
@@ -32,6 +33,7 @@
             flex-shrink: 0;
             background-color: white;
             transition: all 0.2s ease-in-out;
+            position: relative; /* 明确设置定位，确保包含绝对定位的子元素 */
         }
         .preview-page-content {
             box-sizing: border-box;
@@ -102,6 +104,11 @@
             font-size: 1em;
             margin-bottom: 0.3em;
             line-height: 1.6;
+            display: list-item;
+            vertical-align: baseline;
+        }
+        .rendered-content li::marker {
+            vertical-align: baseline;
         }
         .rendered-content blockquote {
             font-style: normal;
@@ -110,16 +117,14 @@
             position: relative;
             line-height: 1.8;
             border-radius: 0 0 0.6em 0.6em;
-            color: #FEEEED;
-            background: #000;
-            box-shadow: #84A1A8 0 0.6em 0.9em;
             margin: 0.5em 0;
+            /* color, background, box-shadow will be set by theme */
         }
         .rendered-content blockquote p {
-            color: #FEEEED !important;
             font-size: 0.8em !important;
             margin: 0 !important;
             letter-spacing: normal !important;
+            /* color will be set by theme */
         }
         .rendered-content img {
             max-width: 100%;
@@ -148,16 +153,21 @@
         }
         .rendered-content strong {
             font-weight: bold;
-            color: rgb(248,57,41);
+            vertical-align: baseline;
+            line-height: inherit;
+            /* color will be set by theme */
         }
         .rendered-content em {
-            color: rgb(248,57,41);
             letter-spacing: 0.3em;
+            vertical-align: baseline;
+            line-height: inherit;
+            /* color will be set by theme */
         }
         .rendered-content a {
-            color: rgb(248,57,41);
-            border-bottom: 1px solid #ff3502;
             text-decoration: none;
+            vertical-align: baseline;
+            line-height: inherit;
+            /* color and border-bottom will be set by theme */
         }
         .rendered-content table {
             width: 100%;
@@ -231,37 +241,58 @@
             <!-- Left: Controls -->
             <aside class="w-1/3 min-w-[400px] max-w-[600px] bg-white border-r border-gray-200/80 flex flex-col p-6 overflow-y-auto">
                 <!-- Editor Section -->
-                <div class="flex-grow flex flex-col">
+                <div class="flex flex-col" style="height: 320px;">
                     <h2 class="text-lg font-bold mb-3">1. 编写内容</h2>
                     <p class="text-sm text-gray-500 mb-4">在此处输入或粘贴您的 Markdown 内容。右侧将实时展示分页后的预览效果。</p>
                     <textarea id="markdown-input" class="w-full flex-grow border border-gray-300 rounded-lg p-4 text-sm leading-6 resize-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition" spellcheck="false"></textarea>
                 </div>
                 <!-- Customization Section -->
-                <div class="mt-8">
+                <div class="mt-8 flex-grow">
                     <h2 class="text-lg font-bold mb-4">2. 自定义样式</h2>
-                     <div class="grid grid-cols-3 gap-4">
+                    
+                    <!-- 第一行：主题和字体 -->
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label for="theme-select" class="block text-sm font-medium text-gray-700 mb-2">主题风格</label>
+                            <select id="theme-select" class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-orange-500 focus:border-orange-500 text-sm py-2">
+                                <option value="sunshine">小太阳（默认）</option>
+                                <option value="liuliu">六六</option>
+                                <option value="liuliu2">六六2</option>
+                                <option value="zoro">索隆</option>
+                            </select>
+                        </div>
 
                         <div>
-                            <label for="font-select" class="block text-sm font-medium text-gray-700 mb-1">内容字体</label>
-                            <select id="font-select" class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-orange-500 focus:border-orange-500">
+                            <label for="font-select" class="block text-sm font-medium text-gray-700 mb-2">内容字体</label>
+                            <select id="font-select" class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-orange-500 focus:border-orange-500 text-sm py-2">
                                 <option value="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif">系统默认字体</option>
                                 <option value="'Inter', 'Noto Serif SC', sans-serif">现代无衬线</option>
                                 <option value="'Noto Serif SC', serif">典雅衬线体</option>
                             </select>
                         </div>
+                    </div>
+
+                    <!-- 第二行：滑块控件 -->
+                    <div class="grid grid-cols-2 gap-4 mb-4">
                         <div>
-                            <label for="padding-slider" class="block text-sm font-medium text-gray-700 mb-1">页面边距: <span id="padding-value">15</span>px</label>
-                            <input id="padding-slider" type="range" min="10" max="60" value="15" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                            <label for="font-size-slider" class="block text-sm font-medium text-gray-700 mb-2">
+                                字体大小: <span id="font-size-value" class="text-orange-600 font-semibold">13</span>px
+                            </label>
+                            <input id="font-size-slider" type="range" min="12" max="24" value="13" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-orange-500">
                         </div>
                         <div>
-                            <label for="font-size-slider" class="block text-sm font-medium text-gray-700 mb-1">字体大小: <span id="font-size-value">13</span>px</label>
-                            <input id="font-size-slider" type="range" min="12" max="24" value="13" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                            <label for="padding-slider" class="block text-sm font-medium text-gray-700 mb-2">
+                                页面边距: <span id="padding-value" class="text-orange-600 font-semibold">15</span>px
+                            </label>
+                            <input id="padding-slider" type="range" min="10" max="60" value="15" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-orange-500">
                         </div>
                     </div>
-                    <div class="mt-4">
+
+                    <!-- 第三行：水印选项 -->
+                    <div class="pt-3 border-t border-gray-200">
                         <div class="flex items-center">
-                            <input id="watermark-checkbox" type="checkbox" checked class="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded">
-                            <label for="watermark-checkbox" class="ml-2 block text-sm font-medium text-gray-700">显示水印</label>
+                            <input id="watermark-checkbox" type="checkbox" checked class="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded cursor-pointer">
+                            <label for="watermark-checkbox" class="ml-2 block text-sm font-medium text-gray-700 cursor-pointer">显示水印</label>
                         </div>
                     </div>
                 </div>
@@ -283,7 +314,7 @@
         document.addEventListener('DOMContentLoaded', function () {
             // Wait for all scripts to load
             const checkLibraries = () => {
-                return window.marked && window.hljs && window.html2canvas && window.JSZip;
+                return window.marked && window.hljs && window.html2canvas && window.domtoimage && window.JSZip;
             };
 
             const initApp = () => {
@@ -306,6 +337,7 @@
                 const previewArea = document.getElementById('preview-area');
                 const hiddenRenderer = document.getElementById('hidden-renderer');
 
+                const themeSelect = document.getElementById('theme-select');
                 const fontSelect = document.getElementById('font-select');
                 const paddingSlider = document.getElementById('padding-slider');
                 const paddingValue = document.getElementById('padding-value');
@@ -365,15 +397,71 @@ function generatePages(markdown) {
 
                 markdownInput.value = defaultMarkdown;
 
-                // Define themes first
+                // Define themes first - 为30+中年男性用户设计的配色方案
                 const themes = {
-                    vintage: {
-                        name: '复古牛皮纸',
-                        background: '#f4f1e8',
-                        text: '#5d4037',
-                        accent: '#8d6e63',
-                        border: '#d7ccc8',
-                        codeBackground: '#efebe9'
+                    sunshine: {
+                        name: '小太阳',
+                        background: '#ffffff',
+                        text: '#3f2a1d',
+                        accent: '#ffb74d',
+                        border: '#ffe0b2',
+                        codeBackground: '#fff3e0',
+                        headingColor: '#f57c00',
+                        strongColor: '#ef6c00',
+                        linkColor: '#fb8c00',
+                        blockquoteStyle: {
+                            background: 'linear-gradient(135deg, #ffd54f 0%, #ffb300 100%)',
+                            color: '#3f2a1d',
+                            boxShadow: 'rgba(255, 171, 64, 0.45) 0 0.5em 0.8em'
+                        }
+                    },
+                    liuliu: {
+                        name: '六六',
+                        background: '#eceff1',
+                        text: '#263238',
+                        accent: '#546e7a',
+                        border: '#b0bec5',
+                        codeBackground: '#cfd8dc',
+                        headingColor: '#37474f',
+                        strongColor: '#1565c0',  // 商务蓝，专业可靠
+                        linkColor: '#0d47a1',    // 深蓝色
+                        blockquoteStyle: {
+                            background: 'linear-gradient(135deg, #455a64 0%, #546e7a 100%)',
+                            color: '#eceff1',
+                            boxShadow: '#78909c 0 0.5em 0.8em'
+                        }
+                    },
+                    liuliu2: {
+                        name: '六六2',
+                        background: '#f5f5f0',  // 温暖的米白色背景
+                        text: '#3e3e3e',        // 深灰色文字
+                        accent: '#8b7355',      // 沉稳的褐色强调
+                        border: '#d4c5b9',      // 柔和的褐色边框
+                        codeBackground: '#ebe8e1',  // 浅米色代码背景
+                        headingColor: '#5a4a3a',    // 深褐色标题
+                        strongColor: '#c1440e',     // 暖橙红色加粗，与褐色主题形成对比
+                        linkColor: '#a23a0a',       // 深橙色链接
+                        blockquoteStyle: {
+                            background: 'linear-gradient(135deg, #6b5d4f 0%, #8b7355 100%)',
+                            color: '#f5f5f0',
+                            boxShadow: '#9d8b73 0 0.5em 0.8em'
+                        }
+                    },
+                    zoro: {
+                        name: '索隆',
+                        background: '#263238',
+                        text: '#cfd8dc',
+                        accent: '#78909c',
+                        border: '#455a64',
+                        codeBackground: '#37474f',
+                        headingColor: '#90a4ae',
+                        strongColor: '#ffa726',  // 温暖橙色，护眼醒目
+                        linkColor: '#ff9800',    // 橙色
+                        blockquoteStyle: {
+                            background: 'linear-gradient(135deg, #1c313a 0%, #263238 100%)',
+                            color: '#b0bec5',
+                            boxShadow: '#455a64 0 0.4em 0.6em'
+                        }
                     }
                 };
 
@@ -382,7 +470,7 @@ function generatePages(markdown) {
                 // App State
                 const state = {
                     markdown: markdownInput.value,
-                    theme: 'vintage',
+                    theme: 'sunshine',
                     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif",
                     padding: 15,
                     fontSize: 13,
@@ -482,7 +570,7 @@ function generatePages(markdown) {
                                 tempContainer.style.top = '-9999px';
                                 tempContainer.style.left = '-9999px';
                                 tempContainer.style.backgroundColor = 'white';
-                                tempContainer.style.padding = '20px';
+                                tempContainer.style.padding = '12px';
                                 tempContainer.style.fontFamily = state.fontFamily;
                                 tempContainer.style.fontSize = state.fontSize + 'px';
                                 
@@ -491,22 +579,23 @@ function generatePages(markdown) {
                                 clonedTable.style.width = 'auto';
                                 clonedTable.style.minWidth = 'max-content';
                                 clonedTable.style.borderCollapse = 'collapse';
-                                clonedTable.style.border = '1px solid #ddd';
+                                clonedTable.style.border = '1px solid #ccc';
                                 clonedTable.style.backgroundColor = '#fff';
                                 
-                                // 设置单元格样式
+                                // 设置单元格样式 - 居中显示，字体放大
                                 clonedTable.querySelectorAll('th, td').forEach(cell => {
                                     cell.style.border = '1px solid #ddd';
-                                    cell.style.padding = '8px 12px';
-                                    cell.style.textAlign = 'left';
-                                    cell.style.verticalAlign = 'top';
+                                    cell.style.padding = '8px 12px';  // 增加内边距
+                                    cell.style.textAlign = 'center';  // 文字居中
+                                    cell.style.verticalAlign = 'middle';  // 垂直居中
                                     cell.style.whiteSpace = 'nowrap';
                                     cell.style.maxWidth = 'none';
+                                    cell.style.fontSize = state.fontSize * 1.1 + 'px';  // 字体放大10%
                                 });
                                 
                                 clonedTable.querySelectorAll('th').forEach(th => {
                                     th.style.fontWeight = 'bold';
-                                    th.style.backgroundColor = '#f8f9fa';
+                                    th.style.backgroundColor = '#f5f5f5';
                                     th.style.color = '#333';
                                 });
                                 
@@ -516,7 +605,7 @@ function generatePages(markdown) {
                                 // 使用html2canvas转换为图片
                                 const canvas = await html2canvas(tempContainer, {
                                     backgroundColor: 'white',
-                                    scale: 2,
+                                    scale: 2.5,  // 提高清晰度
                                     useCORS: true,
                                     allowTaint: true
                                 });
@@ -529,10 +618,10 @@ function generatePages(markdown) {
                                 img.src = canvas.toDataURL('image/png');
                                 img.style.maxWidth = '100%';
                                 img.style.height = 'auto';
-                                img.style.border = '1px solid #ddd';
+                                img.style.border = 'none';
                                 img.style.borderRadius = '4px';
                                 img.style.display = 'block';
-                                img.style.margin = '10px auto';
+                                img.style.margin = '12px auto';
                                 
                                 return img;
                             } catch (error) {
@@ -674,16 +763,35 @@ function generatePages(markdown) {
                             
                             let clonedElement;
                             
-                            // 检查是否为宽表格
+                            // 检查是否为表格或包含表格的元素
+                            let tableElement = null;
                             if (element.tagName === 'TABLE') {
+                                tableElement = element;
+                            } else {
+                                // 检查元素内部是否包含表格
+                                tableElement = element.querySelector('table');
+                            }
+                            
+                            if (tableElement) {
                                 // 计算表格的列数
-                                const firstRow = element.querySelector('tr');
+                                const firstRow = tableElement.querySelector('tr');
                                 const columnCount = firstRow ? firstRow.children.length : 0;
                                 
                                 // 如果列数超过4列，转换为图片
                                 if (columnCount > 4) {
                                     console.log(`Converting wide table with ${columnCount} columns to image`);
-                                    clonedElement = await convertWideTableToImage(element);
+                                    const imgElement = await convertWideTableToImage(tableElement);
+                                    
+                                    // 如果原元素不是表格本身，需要替换表格部分
+                                    if (element.tagName !== 'TABLE') {
+                                        clonedElement = element.cloneNode(true);
+                                        const clonedTable = clonedElement.querySelector('table');
+                                        if (clonedTable) {
+                                            clonedTable.replaceWith(imgElement);
+                                        }
+                                    } else {
+                                        clonedElement = imgElement;
+                                    }
                                 } else {
                                     clonedElement = element.cloneNode(true);
                                 }
@@ -728,8 +836,9 @@ function generatePages(markdown) {
                             // 不可分割的元素类型：表格、图片、链接、水平线、代码块等
                             const indivisibleElements = ['TABLE', 'IMG', 'A', 'HR', 'PRE', 'CODE', 'BLOCKQUOTE'];
                             
+                            // 检查元素本身是否是不可分割类型，或者包含这些元素
                             if (indivisibleElements.includes(element.tagName) || 
-                                element.querySelector('img, a, table, hr, pre, code')) {
+                                element.querySelector('img, a, table, hr, pre, code, blockquote')) {
                                 // 按整个元素处理
                                 return await processElementAsWhole(element, elementIndex);
                             } else {
@@ -739,10 +848,10 @@ function generatePages(markdown) {
                         }
 
                         // 处理列表项分页的函数
-                        function processListElement(listElement, elementIndex) {
+                        async function processListElement(listElement, elementIndex) {
                             const listItems = Array.from(listElement.children);
                             if (listItems.length === 0) {
-                                processElement(listElement, elementIndex);
+                                await processElement(listElement, elementIndex);
                                 return;
                             }
 
@@ -762,7 +871,20 @@ function generatePages(markdown) {
                             
                             for (let i = 0; i < listItems.length; i++) {
                                 const listItem = listItems[i];
-                                const clonedItem = listItem.cloneNode(true);
+                                
+                                // 检查列表项内是否包含宽表格，如果有则转换为图片
+                                let clonedItem = listItem.cloneNode(true);
+                                const tableInItem = clonedItem.querySelector('table');
+                                if (tableInItem) {
+                                    const firstRow = tableInItem.querySelector('tr');
+                                    const columnCount = firstRow ? firstRow.children.length : 0;
+                                    
+                                    if (columnCount > 4) {
+                                        console.log(`Converting wide table with ${columnCount} columns inside list item to image`);
+                                        const imgElement = await convertWideTableToImage(tableInItem);
+                                        tableInItem.replaceWith(imgElement);
+                                    }
+                                }
                                 
                                 // 创建临时列表来测试高度
                                 const tempList = currentList.cloneNode(true);
@@ -850,7 +972,7 @@ function generatePages(markdown) {
                             
                             // 特殊处理列表元素
                             if (element.tagName === 'UL' || element.tagName === 'OL') {
-                                processListElement(element, i);
+                                await processListElement(element, i);
                             } else {
                                 await processElement(element, i);
                             }
@@ -868,6 +990,16 @@ function generatePages(markdown) {
                                 console.log(`Adjusted last page height to ${minRequiredHeight}px (content: ${actualHeight}px)`);
                             }
                         }
+                        
+                        // 在所有内容添加完成后，对每个页面重新应用主题样式
+                        console.log('Applying theme to all pages after content is added');
+                        const allPages = previewArea.querySelectorAll('.preview-page');
+                        allPages.forEach(page => {
+                            const content = page.querySelector('.preview-page-content');
+                            if (content) {
+                                applyTheme(page, content);
+                            }
+                        });
 
                     } catch (error) {
                         console.error('Error in renderAndPaginate:', error);
@@ -878,100 +1010,89 @@ function generatePages(markdown) {
 
                 function applyTheme(pageContainer, contentContainer) {
                     console.log('applyTheme called with theme:', state.theme);
-                    const currentTheme = themes[state.theme] || themes.vintage;
+                    const currentTheme = themes[state.theme] || themes.sunshine;
                     console.log('Theme object:', currentTheme);
                     const pageBg = currentTheme.background;
                     const textColor = currentTheme.text;
                     const accentColor = currentTheme.accent;
                     const borderColor = currentTheme.border;
                     const codeBackground = currentTheme.codeBackground;
+                    const headingColor = currentTheme.headingColor;
+                    const strongColor = currentTheme.strongColor;
+                    const linkColor = currentTheme.linkColor;
+                    const blockquoteStyle = currentTheme.blockquoteStyle;
                     
                     pageContainer.style.backgroundColor = pageBg;
                     contentContainer.style.color = textColor;
                     
-                    // 清除之前的主题样式，但保留基础样式
-                    contentContainer.querySelectorAll('*').forEach(el => {
-                        // 只重置主题相关的样式属性
-                        el.style.color = '';
-                        el.style.backgroundColor = '';
-                        el.style.borderColor = '';
-                        el.style.borderLeft = '';
-                        el.style.borderBottom = '';
-                        el.style.background = '';
-                        el.style.boxShadow = '';
-                        // 移除之前添加的内容包装器
-                        const contentSpan = el.querySelector('.content');
-                        if (contentSpan) {
-                            el.textContent = contentSpan.textContent;
-                        }
-                        // 移除引号元素
-                        const quoteBefore = el.querySelector('.quote-before');
-                        const quoteAfter = el.querySelector('.quote-after');
-                        if (quoteBefore) quoteBefore.remove();
-                        if (quoteAfter) quoteAfter.remove();
-                    });
-                    
-                    // 应用vintage主题的基本样式
-                    // H1-H6 标题样式
+                    // H1-H6 标题样式 - 使用主题的标题颜色
                     contentContainer.querySelectorAll('h1').forEach(h1 => {
-                        h1.style.color = accentColor;
-                        h1.style.fontWeight = 'bold';
-                        h1.style.fontSize = '2em';
-                        h1.style.margin = '0.67em 0';
-                        h1.style.lineHeight = '1.2';
+                        h1.style.setProperty('color', headingColor, 'important');
+                        // h1的其他样式保持CSS默认，不需要重复设置
                     });
                     
                     contentContainer.querySelectorAll('h2').forEach(h2 => {
-                        h2.style.color = accentColor;
-                        h2.style.fontWeight = 'bold';
-                        h2.style.fontSize = '1.5em';
-                        h2.style.margin = '0.83em 0';
-                        h2.style.lineHeight = '1.3';
+                        h2.style.setProperty('color', headingColor, 'important');
+                        // h2的其他样式保持CSS默认，不需要重复设置
                     });
                     
                     contentContainer.querySelectorAll('h3').forEach(h3 => {
-                        h3.style.color = accentColor;
-                        h3.style.fontWeight = 'bold';
-                        h3.style.fontSize = '1.17em';
-                        h3.style.margin = '1em 0';
-                        h3.style.lineHeight = '1.4';
+                        h3.style.setProperty('color', headingColor, 'important');
+                        // h3的其他样式保持CSS默认，不需要重复设置
                     });
                     
                     contentContainer.querySelectorAll('h4').forEach(h4 => {
-                        h4.style.color = accentColor;
-                        h4.style.fontWeight = 'bold';
-                        h4.style.fontSize = '1em';
-                        h4.style.margin = '1.33em 0';
-                        h4.style.lineHeight = '1.4';
+                        h4.style.setProperty('color', headingColor, 'important');
+                        // h4的其他样式保持CSS默认，不需要重复设置
                     });
                     
                     contentContainer.querySelectorAll('h5').forEach(h5 => {
-                        h5.style.color = accentColor;
-                        h5.style.fontWeight = 'bold';
-                        h5.style.fontSize = '0.83em';
-                        h5.style.margin = '1.67em 0';
-                        h5.style.lineHeight = '1.4';
+                        h5.style.setProperty('color', headingColor, 'important');
+                        // h5的其他样式保持CSS默认，不需要重复设置
                     });
                     
                     contentContainer.querySelectorAll('h6').forEach(h6 => {
-                        h6.style.color = accentColor;
-                        h6.style.fontWeight = 'bold';
-                        h6.style.fontSize = '0.67em';
-                        h6.style.margin = '2.33em 0';
-                        h6.style.lineHeight = '1.4';
+                        h6.style.setProperty('color', headingColor, 'important');
+                        // h6的其他样式保持CSS默认，不需要重复设置
                     });
                     
+                    // 引用块样式 - 使用主题的引用块样式
                     contentContainer.querySelectorAll('blockquote').forEach(bq => {
-                        bq.style.borderColor = accentColor;
-                        bq.style.color = textColor;
-                        bq.style.opacity = '0.8';
+                        bq.style.setProperty('background', blockquoteStyle.background, 'important');
+                        bq.style.setProperty('color', blockquoteStyle.color, 'important');
+                        bq.style.setProperty('box-shadow', blockquoteStyle.boxShadow, 'important');
+                        bq.style.borderLeft = 'none';
+                        bq.style.padding = '0.6em';
+                        bq.style.borderRadius = '0 0 0.6em 0.6em';
+                        bq.style.margin = '0.5em 0';
+                        
+                        // 引用块内的段落样式
+                        bq.querySelectorAll('p').forEach(p => {
+                            p.style.setProperty('color', blockquoteStyle.color, 'important');
+                            p.style.fontSize = '0.8em';
+                            p.style.margin = '0';
+                            p.style.letterSpacing = 'normal';
+                        });
                     });
                     
+                    // 加粗文字样式 - 使用主题的加粗颜色
+                    contentContainer.querySelectorAll('strong').forEach(strong => {
+                        strong.style.setProperty('color', strongColor, 'important');
+                        strong.style.fontWeight = 'bold';
+                    });
+                    
+                    // 链接样式 - 使用主题的链接颜色
                     contentContainer.querySelectorAll('a').forEach(link => {
-                        link.style.color = accentColor;
-                        link.style.textDecoration = 'underline';
+                        link.style.setProperty('color', linkColor, 'important');
+                        link.style.textDecoration = 'none';
+                        link.style.setProperty('border-bottom', `1px solid ${linkColor}`, 'important');
                     });
 
+                    // 斜体样式 - 使用强调色
+                    contentContainer.querySelectorAll('em').forEach(em => {
+                        em.style.setProperty('color', strongColor, 'important');
+                        em.style.letterSpacing = '0.3em';
+                    });
                     
                     // 通用样式
                     contentContainer.querySelectorAll('th').forEach(th => {
@@ -1003,7 +1124,10 @@ function generatePages(markdown) {
                     renderAndPaginate();
                 });
 
-
+                themeSelect.addEventListener('change', (e) => {
+                    state.theme = e.target.value;
+                    renderAndPaginate();
+                });
                 
                 fontSelect.addEventListener('change', (e) => {
                     state.fontFamily = e.target.value;
@@ -1040,15 +1164,54 @@ function generatePages(markdown) {
                         for (let i = 0; i < pages.length; i++) {
                             const page = pages[i];
                             try {
-                                const canvas = await html2canvas(page, {
-                                    scale: 1080 / page.offsetWidth, // Export at 1080p width
-                                    useCORS: true,
-                                    backgroundColor: null,
+                                console.log(`Exporting page ${i + 1} using dom-to-image with high quality`);
+                                
+                                // 获取页面的实际尺寸
+                                const pageWidth = page.offsetWidth;
+                                const pageHeight = page.offsetHeight;
+                                
+                                // 使用更高的缩放比例以提升清晰度（5倍）
+                                const scale = 5;
+                                const scaledWidth = pageWidth * scale;
+                                const scaledHeight = pageHeight * scale;
+                                
+                                console.log(`Page ${i + 1} original: ${pageWidth}x${pageHeight}, scaled: ${scaledWidth}x${scaledHeight}`);
+                                
+                                // 使用 dom-to-image 转换页面为高清图片
+                                const blob = await domtoimage.toBlob(page, {
+                                    width: scaledWidth,
+                                    height: scaledHeight,
+                                    style: {
+                                        transform: `scale(${scale})`,
+                                        transformOrigin: 'top left',
+                                        width: pageWidth + 'px',
+                                        height: pageHeight + 'px'
+                                    },
+                                    quality: 1.0,
+                                    cacheBust: true
                                 });
-                                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                                
+                                console.log(`Page ${i + 1} exported successfully, size: ${(blob.size / 1024).toFixed(2)} KB`);
+                                
                                 zip.file(`page-${String(i + 1).padStart(2, '0')}.png`, blob);
                             } catch (error) {
-                                console.error('Error generating canvas for page', i, error);
+                                console.error('Error generating image for page', i, error);
+                                // 如果 dom-to-image 失败，尝试回退到 html2canvas
+                                try {
+                                    console.log(`Falling back to html2canvas for page ${i + 1}`);
+                                    const canvas = await html2canvas(page, {
+                                        scale: 5,
+                                        useCORS: true,
+                                        allowTaint: true,
+                                        logging: false,
+                                        backgroundColor: window.getComputedStyle(page).backgroundColor
+                                    });
+                                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 1.0));
+                                    console.log(`Page ${i + 1} fallback export, size: ${(blob.size / 1024).toFixed(2)} KB`);
+                                    zip.file(`page-${String(i + 1).padStart(2, '0')}.png`, blob);
+                                } catch (fallbackError) {
+                                    console.error('Fallback also failed for page', i, fallbackError);
+                                }
                             }
                         }
                         
@@ -1069,6 +1232,9 @@ function generatePages(markdown) {
                 });
                 
 
+                
+                // 设置主题选择器默认值
+                themeSelect.value = state.theme;
                 
                 // 设置字体选择器默认值
                 fontSelect.value = state.fontFamily;
